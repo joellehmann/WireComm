@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <PolledTimeout.h>
+#include <ArduinoJson.h>
 
 #define SDA_PIN 4
 #define SCL_PIN 5
@@ -11,82 +12,77 @@ int count = 0;
 int i = 0;
 char c;
 char metaCount;
+char mesCount;
+char buffer[200];
+char buffertmp[200];
 bool bEOS;
-String sKey;
-String sValue;
 String sMeta;
+StaticJsonDocument<200> doc;
 
 typedef struct
   {
-      String key;
-      String value;
-  }  metadata;
+    String key;
+    String value;
+  }  kvp;
 
-metadata META[23];
+kvp META[23];
+kvp MES[23];
 
 void setup() {
-  Serial.begin(9600);  // start serial for output
-  Wire.begin(SDA_PIN, SCL_PIN, I2C_MASTER);        // join i2c bus (address optional for master)
+  Serial.begin(9600);
+  Wire.begin(SDA_PIN, SCL_PIN, I2C_MASTER);
   Wire.setClock(30000);
-  Serial.println("Setup fertig.");
+  Serial.println("Setup accomplished!");
 }
 
 void loop() {
-  delay(3000);
+//################################################################################
+//Request Number of Metadata #####################################################
+//################################################################################
   
   if (runNumber == 1)
   {
-    Serial.println("Transmission");
-    Wire.beginTransmission(I2C_SLAVE);  // transmit to device #8
-    Wire.write("reqMetaCount\n");       // sends five bytes
-    Wire.endTransmission();             // stop transmitting
+    Wire.beginTransmission(I2C_SLAVE);
+    Wire.write("reqMetaCount\n");
+    Wire.endTransmission();
     delay(100);
-    Wire.requestFrom(I2C_SLAVE, 1);     // Counter of Measurements
+    Wire.requestFrom(I2C_SLAVE, 1);
     while (Wire.available()) { 
       c = Wire.read();
       metaCount = c;      
     }
-    Serial.print((int)metaCount-48);
     Serial.println("");
     runNumber++;
   } 
-  delay(3000);
-  //memset(c, \n, sizeof c);
+  delay(100);
+
+//################################################################################
+//Request Metadata ###############################################################
+//################################################################################
 
   if (runNumber == 2)
   {
     while (i < (int)metaCount-48)
     {
-      Serial.print("Transmission ");
-      Serial.println(i);
       Wire.beginTransmission(I2C_SLAVE);
-      //Serial.println(String(i).c_str());
       Wire.write((String(i)+"\n").c_str());
       Wire.endTransmission();  
       delay(100);
       Wire.requestFrom(I2C_SLAVE, 23);
       while (Wire.available()) { 
       c = Wire.read();
-      //Serial.println(c);
       if (c != 255 && !bEOS) {   
         sMeta += c;     
       } else {
         bEOS = true;
-        //Serial.println("EOS");
       }
     }
-    //Serial.println(sMeta);
-    sKey = sMeta.substring(0,5);
-    //Serial.println(sMeta.length());
-    sValue = sMeta.substring(6,sMeta.length());
-    Serial.print("KVP ");
+    Serial.print("KVP1 ");
     Serial.print(i);
     Serial.print(" -> ");
-    META[i].key = sKey;
-    META[i].value = sValue;
+    META[i].key = sMeta.substring(0,sMeta.indexOf(":"));
+    META[i].value = sMeta.substring(sMeta.indexOf(":")+1,sMeta.length());
     sMeta = "";
-    sKey = "";
-    sValue = "";
     bEOS = false;
 
     Serial.print(META[i].key);
@@ -95,32 +91,157 @@ void loop() {
     Serial.println("");
     i++;
     }
-    delay(9999999);
-    
-
-
-    Wire.beginTransmission(I2C_SLAVE);  // transmit to device #8
-    Wire.write("reqFEA\n");             // sends five bytes
-    Wire.endTransmission();             // stop transmitting
+    runNumber++;
+    i = 0;
+  }
     delay(100);
-    Wire.requestFrom(I2C_SLAVE, 4);     // Counter of Measurements
+    
+//################################################################################
+//Request Number of Measurements #################################################
+//################################################################################
+
+    if (runNumber == 3)
+  {
+    Wire.beginTransmission(I2C_SLAVE);  
+    Wire.write("reqMesCount\n");
+    Wire.endTransmission();
+    delay(100);
+    Wire.requestFrom(I2C_SLAVE, 1);
     while (Wire.available()) { 
-      char c = Wire.read(); 
-      Serial.print(c);         
+      c = Wire.read();
+      mesCount = c;      
     }
     Serial.println("");
     runNumber++;
   } 
-  
-  //Wire.requestFrom(I2C_SLAVE, 4);    // request 6 bytes from slave device #8
-  //Identifier immer 3 stellig
-  //MOT
-  //TMP
-  //HUM
-  //PRS
+  delay(100);
 
-  while (Wire.available()) { 
-    char c = Wire.read(); 
-    Serial.print(c);         
+//################################################################################
+//Request Measurements ###########################################################
+//################################################################################
+
+if (runNumber == 4)
+  {
+    while (i < (int)mesCount-48)
+    {
+      Wire.beginTransmission(I2C_SLAVE);
+      Wire.write((String(i)+"\n").c_str());
+      Wire.endTransmission();  
+      delay(100);
+      Wire.requestFrom(I2C_SLAVE, 23);
+      while (Wire.available()) { 
+      c = Wire.read();
+      if (c != 255 && !bEOS) {   
+        sMeta += c;     
+      } else {
+        bEOS = true;
+      }
+    }
+    Serial.print("KVP2 ");
+    Serial.print(i);
+    Serial.print(" -> ");
+    MES[i].key = sMeta.substring(0,sMeta.indexOf(":"));
+    MES[i].value = sMeta.substring(sMeta.indexOf(":")+1,sMeta.length());
+    sMeta = "";
+    bEOS = false;
+
+    Serial.print(MES[i].key);
+    Serial.print(":");
+    Serial.print(MES[i].value);
+    Serial.println("");
+    i++;
+    }
+    Serial.println("");
+    runNumber++;
+    i = 0;
   }
+    delay(100);
+
+//################################################################################
+//Request Telemetry ##############################################################
+//################################################################################
+
+if (runNumber == 5)
+  {
+    while (i < (int)mesCount-48)
+    {
+      Wire.beginTransmission(I2C_SLAVE);
+      Wire.write(("req"+String(MES[i].key)+"\n").c_str());
+      Wire.endTransmission();  
+      delay(100);
+      Wire.requestFrom(I2C_SLAVE, 23);
+      while (Wire.available()) { 
+      c = Wire.read();
+      if (c != 255 && !bEOS) {   
+        sMeta += c;     
+      } else {
+        bEOS = true;
+      }
+    }
+    Serial.print(MES[i].key);
+    Serial.print(" -> ");
+    Serial.println(sMeta);
+    sMeta = "";
+    bEOS = false;
+    i++;
+    }
+    Serial.println("");
+    runNumber++;
+    i = 0;
+  }
+    delay(3000);
+
+//################################################################################
+//Building up ATTRIBUTES JSON ####################################################
+//################################################################################
+
+if (runNumber == 6)
+  {
+    JsonObject devid = doc.createNestedObject(META[0].value);
+    i = 1;
+
+    while (i < (int)metaCount-48) 
+    {
+      devid[META[i].key] = META[i].value;
+      i++;
+    }
+
+    serializeJson(doc, buffertmp);
+    strncat(buffer, buffertmp+1,strlen(buffertmp)-2);
+    Serial.println(buffer);
+
+    runNumber++;
+    i = 0;
+    memset(buffer, 0, sizeof buffer);
+    memset(buffertmp, 0, sizeof buffer);
+    doc.clear();
+  }
+    delay(3000);
+
+//################################################################################
+//Building up FEATURES JSON ######################################################
+//################################################################################
+
+if (runNumber == 7)
+  {
+    while (i < (int)mesCount-48) 
+    {
+      JsonObject mesid = doc.createNestedObject(MES[i].key);
+      mesid["value"] = "init";
+      mesid["unit"] = MES[i].value;
+      i++;
+    }
+
+    serializeJson(doc, buffertmp);
+    strncat(buffer, buffertmp+1,strlen(buffertmp)-2);
+    Serial.println(buffer);
+
+    runNumber++;
+    i = 0;
+    memset(buffer, 0, sizeof buffer);
+    memset(buffertmp, 0, sizeof buffer);
+    doc.clear();
+  }
+    delay(99999999);
+
 }
