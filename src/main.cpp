@@ -5,7 +5,6 @@
 
 #include <Arduino.h>
 #include <Wire.h>
-#include <PolledTimeout.h>
 #include <ArduinoJson.h>
 
 #define SDA_PIN 4
