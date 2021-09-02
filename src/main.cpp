@@ -170,13 +170,16 @@ if (runNumber == 5)
   {
     while (i < (int)mesCount-48)
     {
+      Serial.println("SEND TRANS");
       Wire.beginTransmission(I2C_SLAVE);
       Wire.write(("req"+String(MES[i].key)+"\n").c_str());
+      //Wire.write("reqTemp\n");
       Wire.endTransmission();  
       delay(100);
       Wire.requestFrom(I2C_SLAVE, 23);
       while (Wire.available()) { 
       c = Wire.read();
+      //Serial.println(c);
       if (c != 255 && !bEOS) {   
         sMeta += c;     
       } else {
